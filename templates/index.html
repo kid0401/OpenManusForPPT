@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenManus Local Version</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="container">
+    <div class="side-panel">
+        <div class="history-panel">
+            <h2>History Tasks</h2>
+            <div id="task-list" class="task-list"></div>
+        </div>
+        <div class="set-config-panel">
+            <select id="language-select" aria-label="Select language">
+                <option value="en">English</option>
+                <option value="zh">中文</option>
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+                <option value="de">Deutsch</option>
+            </select>
+            <input type="button" id="config-button" value="Configuration Setting" title="Configuration Settings">
+        </div>
+    </div>
+    <div class="main-panel">
+        <div id="task-container" class="task-container">
+            <div class="welcome-message">
+                <h1>Welcome to OpenManus Local Version</h1>
+                <p>Please enter a task prompt to start a new task</p>
+            </div>
+            <div id="log-container" class="step-container"></div>
+        </div>
+
+
+        <div id="input-container" class="input-container">
+            <input
+                    type="text"
+                    id="prompt-input"
+                    placeholder="输入任务指令..."
+            >
+            <div class="action-buttons">
+                <button onclick="createTask()">提交任务</button>
+                <div class="upload-wrapper">
+                    <input
+                            type="file"
+                            id="pptUpload"
+                            hidden
+                            accept=".ppt,.pptx"
+                            onchange="handlePPTUpload(event)"
+                    >
+                    <label for="pptUpload" class="upload-icon" title="上传PPT文件">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="#2196F3">
+                            <path d="M13 19V7.83l4.88 4.88 1.41-1.41L12 4 4.71 11.3l1.41 1.41L11 7.83V19h2z"/>
+                        </svg>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="config-modal" class="config-modal">
+        <div class="config-modal-content">
+            <div class="config-modal-header">
+                <h2>System Configuration</h2>
+                <p>Please fill in the necessary configuration information to continue using the system</p>
+                <span class="close-modal">&times;</span>
+            </div>
+
+            <div class="config-modal-body">
+                <div class="note-box">
+                    <p>⚠️ Please ensure that the following configuration information is correct.</p>
+                    <p>If you do not have an API key, please obtain one from the corresponding AI service provider.</p>
+                </div>
+
+                <div class="config-section">
+                    <h3>LLM Configuration</h3>
+                    <div class="form-group">
+                        <label for="llm-model">Model Name <span class="required-mark">*</span></label>
+                        <input type="text" id="llm-model" name="llm.model" placeholder="For example: claude-3-5-sonnet">
+                    </div>
+                    <div class="form-group">
+                        <label for="llm-base-url">API Base URL <span class="required-mark">*</span></label>
+                        <input type="text" id="llm-base-url" name="llm.base_url"
+                               placeholder="For example: https://api.openai.com/v1">
+                    </div>
+                    <div class="form-group">
+                        <label for="llm-api-key">API Key <span class="required-mark">*</span></label>
+                        <input type="password" id="llm-api-key" name="llm.api_key"
+                               placeholder="Your API key, for example: sk-...">
+                        <span class="field-help">Must be your own valid API key, not the placeholder in the example</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="llm-max-tokens">Max Tokens</label>
+                        <input type="number" id="llm-max-tokens" name="llm.max_tokens" placeholder="For example: 4096">
+                    </div>
+                    <div class="form-group">
+                        <label for="llm-temperature">Temperature</label>
+                        <input type="number" id="llm-temperature" name="llm.temperature" step="0.1"
+                               placeholder="For example: 0.0">
+                    </div>
+                </div>
+
+                <div class="config-section">
+                    <h3>Server Configuration</h3>
+                    <div class="form-group">
+                        <label for="server-host">Host <span class="required-mark">*</span></label>
+                        <input type="text" id="server-host" name="server.host" placeholder="For example: localhost">
+                    </div>
+                    <div class="form-group">
+                        <label for="server-port">Port <span class="required-mark">*</span></label>
+                        <input type="number" id="server-port" name="server.port" placeholder="For example: 5172">
+                    </div>
+                </div>
+            </div>
+
+            <div class="config-modal-footer">
+                <p id="config-error" class="config-error"></p>
+                <div class="config-actions">
+                    <button id="cancel-config-btn" class="secondary-btn">Cancel</button>
+                    <button id="save-config-btn" class="primary-btn">Save Configuration</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/main.js"></script>
+    <script src="/static/i18n.js"></script>
+    <script>
+        // 更新文件处理逻辑
+        function handlePPTUpload(event) {
+            const files = event.target.files;
+            if (!files.length) return;
+
+            const file = files[0];
+            if (!validatePPTFile(file)) {
+                showUploadStatus('仅支持PPT/PPTX文件 (最大5MB)', 'error');
+                event.target.value = '';
+                return;
+            }
+
+            uploadPPTFile(file);
+        }
+
+        function validatePPTFile(file) {
+            const validExtensions = ['.ppt', '.pptx'];
+            const validMimeTypes = [
+                'application/vnd.ms-powerpoint',
+                'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                'application/mspowerpoint',
+                'application/octet-stream'
+            ];
+
+            const fileExtension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+            return (validExtensions.includes(fileExtension) ||
+                   validMimeTypes.includes(file.type)) &&
+                   file.size <= 5 * 1024 * 1024;
+        }
+
+        async function uploadPPTFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                showUploadStatus('正在上传PPT文件...');
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || '上传失败');
+                }
+
+                const result = await response.json();
+                showUploadStatus(`上传成功！任务ID: ${result.task_id}`);
+                startTaskMonitoring(result.task_id);
+            } catch (error) {
+                showUploadStatus(`错误: ${error.message}`, 'error');
+                console.error('Upload Error:', error);
+            }
+        }
+
+        // 新增状态显示函数
+        function showUploadStatus(message, type = 'info') {
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `upload-status ${type}`;
+            statusDiv.textContent = message;
+
+            const existingStatus = document.querySelector('.upload-status');
+            if (existingStatus) existingStatus.remove();
+
+            const container = document.querySelector('.main-panel') || document.body;
+            container.prepend(statusDiv);
+
+            setTimeout(() => {
+                statusDiv.style.opacity = '0';
+                setTimeout(() => statusDiv.remove(), 300);
+            }, 3000);
+        }
+
+        // 添加任务监控函数
+        function startTaskMonitoring(taskId) {
+            const eventSource = new EventSource(`/tasks/${taskId}/events`);
+            const logContainer = document.getElementById('log-container');
+
+            eventSource.onmessage = function(event) {
+                // 心跳包处理
+                if (event.data.trim() === '') return;
+            };
+
+            eventSource.addEventListener('status', function(event) {
+                const data = JSON.parse(event.data);
+                updateTaskStatus(data);
+            });
+
+            eventSource.addEventListener('think', function(event) {
+                const data = JSON.parse(event.data);
+                appendLog('think', data.result);
+            });
+
+            eventSource.addEventListener('tool', function(event) {
+                const data = JSON.parse(event.data);
+                appendLog('tool', data.result);
+            });
+
+            eventSource.addEventListener('complete', function() {
+                appendLog('complete', 'Task completed');
+
+            // 检查是否为PPT解析任务
+            const taskRes =  fetch(`/tasks/${taskId}`);
+            const taskData =  taskRes.json();
+
+            if (taskData.prompt.startsWith("PPT处理:")) {
+                // 自动创建生成任务面板
+                const autoPanel = document.createElement('div');
+                autoPanel.className = 'auto-generation-panel';
+                autoPanel.innerHTML = `
+                    <h4>🎉 自动生成任务已创建</h4>
+                    <p>系统正在自动生成演讲稿...</p>
+                    <div id="auto-progress-${taskId}"></div>
+                `;
+                document.getElementById('log-container').appendChild(autoPanel);
+
+                // 监控自动生成进度
+                const genTaskId = taskData.related_tasks?.speech_generation;
+                if (genTaskId) {
+                    monitorAutoGeneration(genTaskId, taskId);
+                }
+            }
+
+            eventSource.close();
+            });
+
+            eventSource.addEventListener('error', function(event) {
+                const error = JSON.parse(event.data);
+                appendLog('error', error.message);
+                eventSource.close();
+            });
+
+            eventSource.addEventListener('slide_analysis', function(event) {
+                const data = JSON.parse(event.data);
+                appendLog('slide_analysis', data.result);
+            });
+
+            eventSource.addEventListener('slide_content', function(event) {
+                const data = JSON.parse(event.data);
+                appendLog('slide_content', data.result);
+            });
+
+            eventSource.addEventListener('summary_report', function(event) {
+                const data = JSON.parse(event.data);
+                appendLog('summary_report', data.result);
+            });
+
+            function appendLog(type, content) {
+                const logElement = document.createElement('div');
+                logElement.className = `log-line ${type}`;
+
+                // 类型前缀映射表
+                const prefixMap = {
+                    slide_analysis: '🔍 PPT结构分析',
+                    slide_content: '📄 幻灯片内容',
+                    summary_report: '📊 分析总结',
+                    error: '❌ 解析错误'
+                };
+
+                // 内容格式化处理
+                let contentHtml = content;
+
+                switch(type) {
+                    case 'slide_analysis':
+                        contentHtml = `<div class="analysis-result">${content}</div>`;
+                        break;
+
+                    case 'slide_content':
+                        // 添加内容校验
+                        const safeContent = content || '无内容';
+                        const [slideTitle, ...slideBody] = safeContent.split('\n');
+                        contentHtml = `
+                            <div class="slide-header">${slideTitle || '无标题'}</div>
+                            <div class="slide-body">
+                                ${slideBody.map(line => `<p>${line}</p>`).join('')}
+                            </div>
+                        `;
+                        break;
+
+                    case 'summary_report':
+                        const summaryLines = content.split('\n');
+                        contentHtml = `
+                            <div class="summary-box">
+                                <div class="summary-icon">📋</div>
+                                ${summaryLines.map(line => `<div class="summary-line">${line}</div>`).join('')}
+                            </div>
+                        `;
+                        break;
+                }
+
+                // 构建完整日志条目
+                logElement.innerHTML = `
+                    <div class="log-prefix">
+                        <span class="log-icon">${prefixMap[type].split(' ')[0]}</span>
+                        ${prefixMap[type]}
+                    </div>
+                    ${contentHtml}
+                `;
+
+                // 插入日志容器并滚动到底部
+                const logContainer = document.getElementById('log-container');
+                logContainer.appendChild(logElement);
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+
+            function updateTaskStatus(data) {
+                // 更新任务状态显示逻辑（根据你的UI结构实现）
+                console.log('Status updated:', data);
+            }
+        }
+        async function generateSpeech(taskId) {
+            try {
+                const prompt = document.getElementById(`speech-prompt-${taskId}`).value;
+                if (!prompt) {
+                    alert('请输入生成要求');
+                    return;
+                }
+
+                const response = await fetch('/api/generate-speech', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        task_id: taskId,
+                        prompt: prompt
+                    })
+                });
+
+                const result = await response.json();
+                startTaskMonitoring(result.task_id);
+
+                // 监控生成状态
+                const checkComplete = setInterval(async () => {
+                    const taskRes = await fetch(`/tasks/${result.task_id}`);
+                    const taskData = await taskRes.json();
+
+                    if (taskData.status.includes('completed')) {
+                        clearInterval(checkComplete);
+                        showSpeechResult(taskId);
+                    }
+                }, 1000);
+
+            } catch (error) {
+                console.error('生成失败:', error);
+            }
+        }
+
+        function monitorAutoGeneration(genTaskId, pptTaskId) {
+            const eventSource = new EventSource(`/tasks/${genTaskId}/events`);
+            const progressDiv = document.getElementById(`auto-progress-${pptTaskId}`);
+
+            eventSource.addEventListener('step', (event) => {
+                const data = JSON.parse(event.data);
+                progressDiv.innerHTML += `
+                    <div class="auto-step">
+                        <span class="time">${new Date().toLocaleTimeString()}</span>
+                        ${data.result}
+                    </div>
+                `;
+            });
+
+            eventSource.addEventListener('complete', () => {
+                progressDiv.innerHTML += `
+                    <div class="auto-complete">
+                        ✅ 生成完成！
+                        <a href="/api/download-speech/${pptTaskId}" class="download-link">
+                            下载自动生成的演讲稿
+                        </a>
+                    </div>
+                `;
+                eventSource.close();
+            });
+        }
+        function showAutoGenResult(taskId) {
+            const resultDiv = document.createElement('div');
+            resultDiv.className = 'auto-gen-result';
+            resultDiv.innerHTML = `
+                <h4>自动生成过程详情</h4>
+                <div class="thinking-process"></div>
+                <a href="/api/download-speech/${taskId}" class="download-btn">
+                    ⬇️ 下载最终演讲稿
+                </a>
+            `;
+
+            document.getElementById('log-container').appendChild(resultDiv);
+
+            // 绑定详细事件流
+            const detailSource = new EventSource(`/tasks/${taskId}/events`);
+            detailSource.onmessage = event => {
+                const processDiv = resultDiv.querySelector('.thinking-process');
+                processDiv.innerHTML += `<div class="step">${event.data}</div>`;
+            };
+        }
+    </script>
+</body>
+</html>
